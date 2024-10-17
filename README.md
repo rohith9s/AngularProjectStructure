@@ -235,3 +235,281 @@ export class ProductExistsGuard implements CanActivate {
 - **API Interaction Services (`product-api.service.ts`)**: These services interact with external APIs, handling HTTP requests to fetch or update data from a backend.
 
 ---
+
+
+**ProductsModule** along with the **AppModule** setup, including lazy loading for the `ProductsModule`. 
+
+### Project Structure for ProductsModule and AppModule
+
+```bash
+src/
+│
+├── app/
+│   ├── core/                         # Core Module for Singleton services, Guards, and Interceptors
+│   │   ├── services/                 # Core services used throughout the app
+│   │   ├── guards/                   # Guards to protect routes
+│   │   ├── core.module.ts            # Core Module
+│   │
+│   ├── shared/                       # Shared Module for reusable components, pipes, and directives
+│   │   ├── shared.module.ts          # Shared Module
+│   │
+│   ├── products/                     # Products Feature Module (Lazy-loaded)
+│   │   ├── components/               # Components for Products
+│   │   │   ├── product-list/         # Component for listing products
+│   │   │   │   ├── product-list.component.ts
+│   │   │   │   ├── product-list.component.html
+│   │   │   ├── product-detail/       # Component for product details
+│   │   │   │   ├── product-detail.component.ts
+│   │   │   │   ├── product-detail.component.html
+│   │   ├── services/                 # Product-specific services
+│   │   │   ├── product-api.service.ts  # API Service to fetch product data
+│   │   ├── guards/                   # Guards specific to Products module
+│   │   │   ├── product-exists.guard.ts  # Guard to check if product exists
+│   │   ├── products-routing.module.ts  # Products Routing Module (Lazy loaded)
+│   │   ├── products.module.ts        # Products Module
+│   │
+│   ├── app.component.ts              # Root component
+│   ├── app.module.ts                 # Root application module
+│   ├── app-routing.module.ts         # Root application routing with lazy-loading
+│
+└── assets/                           # Static assets like images, icons, etc.
+```
+
+---
+
+### 1. **AppModule (`app.module.ts`)**  
+The AppModule should be kept lightweight and use lazy loading for feature modules like the `ProductsModule`.
+
+```typescript
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AppRoutingModule } from './app-routing.module';  // Import routing with lazy loading
+import { AppComponent } from './app.component';
+import { CoreModule } from './core/core.module';  // Import CoreModule once
+
+@NgModule({
+  declarations: [
+    AppComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,  // Main routing with lazy loading
+    CoreModule,        // Import CoreModule with services/guards
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+```
+
+### 2. **AppRoutingModule (`app-routing.module.ts`)**  
+This routing module handles the lazy loading of the `ProductsModule`.
+
+```typescript
+// app-routing.module.ts
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+
+const routes: Routes = [
+  { path: '', redirectTo: '/products', pathMatch: 'full' },
+  { path: 'products', loadChildren: () => import('./products/products.module').then(m => m.ProductsModule) },
+  { path: '**', redirectTo: '/products' }  // Wildcard route redirects to products
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],  // Main routing configuration
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+```
+
+### 3. **ProductsModule (`products.module.ts`)**  
+The feature module that handles product listing and detail pages. It imports shared components if needed and uses a service for API interaction and a guard for route protection.
+
+```typescript
+// products.module.ts
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ProductsRoutingModule } from './products-routing.module';
+import { ProductListComponent } from './components/product-list/product-list.component';
+import { ProductDetailComponent } from './components/product-detail/product-detail.component';
+import { SharedModule } from '../shared/shared.module';  // Import shared components if needed
+
+@NgModule({
+  declarations: [
+    ProductListComponent,
+    ProductDetailComponent
+  ],
+  imports: [
+    CommonModule,
+    ProductsRoutingModule,  // Routing module for this feature
+    SharedModule            // Shared components, directives, pipes
+  ]
+})
+export class ProductsModule { }
+```
+
+### 4. **ProductsRoutingModule (`products-routing.module.ts`)**  
+This routing module defines routes for the `ProductsModule`. It uses the `ProductExistsGuard` to protect the product detail route.
+
+```typescript
+// products-routing.module.ts
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { ProductListComponent } from './components/product-list/product-list.component';
+import { ProductDetailComponent } from './components/product-detail/product-detail.component';
+import { ProductExistsGuard } from './guards/product-exists.guard';  // Guard for protecting routes
+
+const routes: Routes = [
+  { path: '', component: ProductListComponent },
+  { path: ':id', component: ProductDetailComponent, canActivate: [ProductExistsGuard] }
+];
+
+@NgModule({
+  imports: [RouterModule.forChild(routes)],  // Child routing for lazy-loaded module
+  exports: [RouterModule]
+})
+export class ProductsRoutingModule { }
+```
+
+### 5. **ProductListComponent (`product-list.component.ts`)**  
+This component displays a list of products.
+
+```typescript
+// product-list.component.ts
+import { Component, OnInit } from '@angular/core';
+import { ProductApiService } from '../../services/product-api.service';  // Product API service
+
+@Component({
+  selector: 'app-product-list',
+  templateUrl: './product-list.component.html'
+})
+export class ProductListComponent implements OnInit {
+  products: any[] = [];
+
+  constructor(private productService: ProductApiService) {}
+
+  ngOnInit(): void {
+    this.productService.getProducts().subscribe(data => {
+      this.products = data;
+    });
+  }
+}
+```
+
+### 6. **ProductListComponent HTML (`product-list.component.html`)**
+
+```html
+<!-- product-list.component.html -->
+<h1>Product List</h1>
+<ul>
+  <li *ngFor="let product of products">
+    <a [routerLink]="['/products', product.id]">{{ product.name }}</a>
+  </li>
+</ul>
+```
+
+### 7. **ProductDetailComponent (`product-detail.component.ts`)**  
+This component shows detailed information for a specific product.
+
+```typescript
+// product-detail.component.ts
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { ProductApiService } from '../../services/product-api.service';  // Product API service
+
+@Component({
+  selector: 'app-product-detail',
+  templateUrl: './product-detail.component.html'
+})
+export class ProductDetailComponent implements OnInit {
+  product: any;
+
+  constructor(
+    private route: ActivatedRoute,
+    private productService: ProductApiService
+  ) {}
+
+  ngOnInit(): void {
+    const productId = this.route.snapshot.params['id'];
+    this.productService.getProductById(productId).subscribe(data => {
+      this.product = data;
+    });
+  }
+}
+```
+
+### 8. **ProductDetailComponent HTML (`product-detail.component.html`)**
+
+```html
+<!-- product-detail.component.html -->
+<h1>{{ product?.name }}</h1>
+<p>{{ product?.description }}</p>
+```
+
+### 9. **Product API Service (`product-api.service.ts`)**  
+This service is responsible for fetching product data from the API.
+
+```typescript
+// product-api.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { Product } from '../models/product.model';  // Product model (if needed)
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ProductApiService {
+  private baseUrl = 'api/products';  // Example API endpoint
+
+  constructor(private http: HttpClient) {}
+
+  getProducts(): Observable<Product[]> {
+    return this.http.get<Product[]>(this.baseUrl);
+  }
+
+  getProductById(id: number): Observable<Product> {
+    return this.http.get<Product>(`${this.baseUrl}/${id}`);
+  }
+}
+```
+
+### 10. **ProductExistsGuard (`product-exists.guard.ts`)**  
+This guard checks if a product exists before navigating to the product detail route.
+
+```typescript
+// product-exists.guard.ts
+import { Injectable } from '@angular/core';
+import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
+import { Observable } from 'rxjs';
+import { ProductApiService } from '../services/product-api.service';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ProductExistsGuard implements CanActivate {
+  constructor(private productService: ProductApiService) {}
+
+  canActivate(
+    route: ActivatedRouteSnapshot,
+    state: RouterStateSnapshot
+  ): Observable<boolean> | Promise<boolean> | boolean {
+    const id = +route.params['id'];
+    return this.productService.getProductById(id).toPromise().then
+
+(product => !!product);
+  }
+}
+```
+
+---
+
+### Key Points
+
+- **Lazy Loading**: The `ProductsModule` is lazy-loaded through `AppRoutingModule` using the `loadChildren` syntax. The module is only loaded when the user navigates to the `/products` route.
+- **Guard**: The `ProductExistsGuard` ensures that the product detail route is only accessible if the product exists.
+- **Service Layer**: The `ProductApiService` handles API interaction, decoupling HTTP calls from the components.
+- **Separation of Concerns**: Components are lightweight and delegate the heavy-lifting to services, ensuring reusability and testability.
+
+This setup is modular, scalable, and follows Angular best practices. You can easily extend this structure to add more feature modules, services, and guards.
